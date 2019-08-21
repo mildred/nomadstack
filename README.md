@@ -10,6 +10,7 @@ To get up and running, a bootstrap phase is required, and this is the object of 
 Current status
 --------------
 
+- nomad job contains hardcoded path to nomad and consul binaries
 - bootstrap is on the way but not complete
 - bootstrap is using a shell script and should be improved
 

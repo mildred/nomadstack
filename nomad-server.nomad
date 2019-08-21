@@ -49,7 +49,11 @@ job "nomad-server" {
           leave_on_interrupt = true
           leave_on_terminate = true
           consul {
+            {{- if eq (env "node.unique.name") "bootstrap" }}
+            address = "{{ env "attr.unique.network.ip-address" }}:18500"
+            {{- else }}
             address = "{{ env "attr.unique.network.ip-address" }}:8500"
+            {{- end }}
           }
           addresses {
             http = "{{ env "NOMAD_IP_http" }}"

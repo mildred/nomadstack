@@ -20,7 +20,7 @@ client {
 }
 
 consul {
-  address = "127.0.0.1:8500"
+  address = "127.0.0.1:18500"
 }
 
 plugin "raw_exec" {

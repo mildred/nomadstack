@@ -1,10 +1,10 @@
-job "consul-client" {
+job "consul-bootstrap-client" {
   type = "system"
   datacenters = ["dc1"]
 
   constraint {
     attribute = "${node.unique.name}"
-    operator  = "!="
+    operator  = "="
     value     = "bootstrap"
   }
 
@@ -23,11 +23,11 @@ job "consul-client" {
       resources {
         memory = 256
         network {
-          port "dns"      { static = 8600 }
-          port "http"     { static = 8500 }
-          port "serf_lan" { static = 8301 }
-          port "serf_wan" { static = 8302 }
-          port "server"   { static = 8300 }
+          port "dns"      { static = 18600 }
+          port "http"     { static = 18500 }
+          port "serf_lan" { static = 18301 }
+          port "serf_wan" { static = 18302 }
+          port "server"   { static = 18300 }
         }
       }
 

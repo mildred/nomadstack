@@ -35,6 +35,7 @@ sleep 5s
 echo "Starting Consul..."
 $nomad run consul-server.nomad
 $nomad run consul-client.nomad
+$nomad run consul-bootstrap-client.nomad
 
 sleep 5s
 
@@ -45,7 +46,7 @@ consul_client_alloc_id=null
 sleep=":"
 while [ $consul_client_alloc_id = null ]; do
   consul_client_alloc_id="$(curl -s http://127.0.0.1:14646/v1/allocations | \
-    jq -r '[.[] | select(.JobID == "consul-client" and .ClientStatus == "running") | .ID][0]')"
+    jq -r '[.[] | select(.JobID == "consul-bootstrap-client" and .ClientStatus == "running") | .ID][0]')"
   consul_client_ip_port="$(curl -s http://127.0.0.1:14646/v1/allocation/$consul_client_alloc_id | \
     jq -r '.TaskResources.consul.Networks[0] | [.IP, ":", [.ReservedPorts[] | select(.Label == "http")][0].Value | tostring] | add')"
   eval "$sleep"
@@ -109,7 +110,11 @@ while [ "$(curl -s $NOMAD_ADDR/v1/nodes | jq '[.[] | select(.Status == "ready")]
   if [ "$old_node_status" != "$node_status" ]; then
     echo
     echo "Ready to accept new Nomad client nodes."
+    echo
     echo "Consul address for auto join: $consul_client_ip_port"
+    echo "Manual join commands:"
+    printf "\tnomad node config -update-servers "
+    curl -s $CONSUL_HTTP_ADDR/v1/catalog/service/nomad | jq -r '[.[] | select(.ServiceTags[] | contains("rpc")) | .ServiceAddress + ":" + (.ServicePort | tostring)] | join(" ")'
     echo
     echo "$ nomad node status"
     echo "$node_status"
@@ -124,10 +129,14 @@ echo "$ nomad node status"
 $nomad node status
 echo
 
-echo "Nomad server joined, stopping bootstrap node..."
+echo "Nomad node joined, stopping bootstrap node..."
 
 $nomad node eligibility -disable -self
 $nomad node drain -enable -self -no-deadline -yes
+
+echo "Stopping consul bootstrap client..."
+
+$nomad stop -purge consul-bootstrap-client
 
 echo "Nomad bootstrap node drained"
 
