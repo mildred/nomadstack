@@ -39,6 +39,9 @@ job "consul-client" {
             "ui": true,
 
             "retry_join": [
+              {{- range service "lan.consul-server" }}
+              "{{ .Address }}:{{ .Port }}",
+              {{- end }}
               "consul-server.lan.service.consul"
             ],
             "retry_join_wan": [

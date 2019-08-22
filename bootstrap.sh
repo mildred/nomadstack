@@ -2,6 +2,9 @@
 nomad=./nomad
 consul=./consul
 
+: ${FINAL_NOMAD_ADDR:=$NOMAD_ADDR}
+: ${FINAL_NOMAD_ADDR:=http://127.0.0.1:4646}
+
 data_dir="$(mktemp -d)"
 
 cleanup(){
@@ -73,6 +76,8 @@ $consul join $consul_server_ip_port
 
 sleep 5s
 
+#$nomad alloc restart $consul_server_alloc_id
+
 echo
 echo "Register bootstrap Nomad server in Consul..."
 $consul services register -id=_nomad-bootstrap-server-http -name=nomad -port=14646 -tag=http
@@ -104,24 +109,31 @@ echo
 echo "----------"
 echo
 
+join_addresses="$(curl -s $CONSUL_HTTP_ADDR/v1/catalog/service/nomad | \
+  jq -r '[.[] | select(.ServiceTags[] | contains("rpc")) | .ServiceAddress + ":" + (.ServicePort | tostring)] | join(" ")')"
+
 old_node_status=""
+old_node_config=""
 while [ "$(curl -s $NOMAD_ADDR/v1/nodes | jq '[.[] | select(.Status == "ready")] | length')" -le 1 ]; do
   node_status="$($nomad node status)"
-  if [ "$old_node_status" != "$node_status" ]; then
+  node_config="$(NOMAD_ADDR=$FINAL_NOMAD_ADDR $nomad node config -update-servers $join_addresses 2>&1)"
+  if [ "$old_node_status$old_node_config" != "$node_status$node_config" ]; then
     echo
     echo "Ready to accept new Nomad client nodes."
-    echo
-    echo "Consul address for auto join: $consul_client_ip_port"
-    echo "Manual join commands:"
-    printf "\tnomad node config -update-servers "
-    curl -s $CONSUL_HTTP_ADDR/v1/catalog/service/nomad | jq -r '[.[] | select(.ServiceTags[] | contains("rpc")) | .ServiceAddress + ":" + (.ServicePort | tostring)] | join(" ")'
+    echo "Make the node available on NOMAD_ADDR=$FINAL_NOMAD_ADDR"
+    echo "Or execute the manual join command:"
+    echo "    nomad node config -update-servers $join_addresses"
     echo
     echo "$ nomad node status"
     echo "$node_status"
     echo
+    echo "$ nomad node config -update-servers $join_addresses"
+    echo "$node_config"
+    echo
   fi
   sleep 5s
   old_node_status="$node_status"
+  old_node_config="$node_config"
 done
 
 echo

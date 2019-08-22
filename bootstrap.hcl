@@ -17,6 +17,7 @@ leave_on_terminate = true
 
 client {
   enabled = true
+  network_interface = "lo"
 }
 
 consul {

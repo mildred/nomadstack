@@ -6,7 +6,20 @@ job "consul-server" {
     auto_promote = true
   }
 
+  migrate {
+    max_parallel     = 1
+    health_check     = "checks"
+    min_healthy_time = "1m"
+    healthy_deadline = "5m"
+  }
+
   group "consul" {
+
+    # Minimum 3 servers are needed to perform migrations off draining nodes
+    # without loosing the cluster. Nomad does not wait the new alloc to be
+    # healthy before terminating the old one.
+    count = 3
+
     task "consul" {
       driver = "raw_exec"
 
@@ -16,6 +29,10 @@ job "consul-server" {
           "agent",
           "-config-file=${NOMAD_TASK_DIR}/config.json",
         ]
+      }
+
+      env {
+        RESCHEDULE = 1
       }
 
       resources {
@@ -32,18 +49,26 @@ job "consul-server" {
       template {
         destination = "local/config.json"
         data = <<CONFIG
+          {{- $is_bootstrap_alloc := and (eq (env "NOMAD_ALLOC_INDEX") "0") (eq (env "node.unique.name") "bootstrap") }}
           {
             "server": true,
             "node_name": "consul-server-{{ env "NOMAD_ALLOC_ID" }}",
 
-            {{ if eq (env "NOMAD_ALLOC_INDEX") "0" }}
+            {{ if $is_bootstrap_alloc }}
             "bootstrap": true,
             {{ end }}
 
             "data_dir": "{{ env "NOMAD_ALLOC_DIR" }}/consul-data",
 
-            "retry_join":     ["consul-server.lan.service.consul"],
-            "retry_join_wan": ["consul-server.wan.service.consul"],
+            "retry_join": [
+              {{- if not $is_bootstrap_alloc }}
+              {{- range service "lan.consul-server" }}
+              "{{ .Address }}:{{ .Port }}",
+              {{- end }}
+              {{- end }}
+              "consul-server.lan.service.consul"
+            ],
+            "retry_join_wan": ["consul-server.wan.service.consul" ],
 
             "addresses": {
               "dns":      "{{ env "NOMAD_IP_dns" }}",
@@ -77,6 +102,32 @@ job "consul-server" {
         name = "consul-server"
         port = "serf_wan"
         tags = [ "wan" ]
+      }
+
+      service {
+        name = "consul-server"
+        port = "http"
+        tags = [ "http" ]
+        check {
+          type           = "http"
+          name           = "Consul node status"
+          interval       = "5s"
+          timeout        = "1s"
+          initial_status = "critical"
+          path           = "/v1/agent/self"
+          check_restart {
+            grace = "30s"
+            limit = 1
+          }
+        }
+        check {
+          type           = "http"
+          name           = "Consul cluster status"
+          interval       = "5s"
+          timeout        = "1s"
+          initial_status = "critical"
+          path           = "/v1/operator/raft/configuration"
+        }
       }
     }
   }
