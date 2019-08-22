@@ -15,4 +15,4 @@ cleanup(){
 
 trap cleanup 0
 
-exec $nomad agent -config=nomad-node.hcl -data-dir="$data_dir" -consul-address="$consul_client_ip_port"
+exec $nomad agent -config=nomad-node.hcl -data-dir="$data_dir"
